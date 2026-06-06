@@ -175,7 +175,7 @@
 <body>
 
 <div class="container">
-    <h1>Image Resizer & 25KB Compressor</h1>
+    <h1>Image Resizer & 20KB Compressor</h1>
     <p style="color: #64748b; margin-top: -10px; font-size: 14px;">Set your target resolution and file size target simultaneously.</p>
 
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
@@ -186,7 +186,7 @@
     <div class="controls-grid">
         <div class="control-group">
             <label for="targetSize">Target Max (KB):</label>
-            <input type="number" id="targetSize" value="25" min="5" max="5000">
+            <input type="number" id="targetSize" value="20" min="5" max="5000">
         </div>
         <div class="control-group">
             <label for="targetWidth">Width (px):</label>
@@ -197,7 +197,7 @@
             <input type="number" id="targetHeight" value="800" min="10">
         </div>
         <div class="checkbox-group">
-            <input type="checkbox" id="lockAspect" checked>
+            <input type="checkbox" id="lockAspect">
             <label for="lockAspect">Maintain Original Aspect Ratio</label>
         </div>
     </div>
@@ -279,7 +279,7 @@
                 originalImage = img;
                 originalAspectRatio = img.width / img.height;
                 
-                // If Aspect ratio lock is checked, adjust current default inputs to match aspect ratio base
+                // Only adjust inputs on load if the aspect lock happens to be manually checked
                 if (lockAspect.checked) {
                     targetHeightInput.value = Math.round(parseInt(targetWidthInput.value) / originalAspectRatio);
                 }
@@ -309,7 +309,6 @@
             
             const url = URL.createObjectURL(compressedBlob);
             
-            // Get final dimensions from image to show accurately
             const finalImg = new Image();
             finalImg.onload = function() {
                 document.getElementById('compPreview').innerHTML = `<img src="${url}">`;
@@ -335,35 +334,30 @@
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
-        // If the file is still too big at low JPEG qualities, the script automatically 
-        // scales down step-by-step from your chosen baseline resolution to hit the target KB.
         while (scale > 0.05) {
             canvas.width = Math.round(baseWidth * scale);
             canvas.height = Math.round(baseHeight * scale);
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Draw image matching custom chosen resolution bounding box
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
             let low = 0.02;
             let high = 1.0;
             
-            // Binary search to find highest possible JPEG quality variant
             for (let i = 0; i < 7; i++) {
                 let quality = (low + high) / 2;
                 let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
                 
                 if (blob.size <= targetBytes) {
                     bestBlob = blob;
-                    low = quality; // Perfect, let's see if we can buy more quality
+                    low = quality; 
                 } else {
-                    high = quality; // Too heavy, drop the ceiling
+                    high = quality; 
                 }
             }
 
             if (bestBlob) return bestBlob;
 
-            // Size budget unmet; drop resolution target dynamically by 10% step increments
             scale -= 0.1;
         }
 
