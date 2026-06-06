@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced Image Optimizer with BG Removal</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation@1.2.0/dist/body-segmentation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation"></script>
 
     <style>
         :root {
@@ -188,7 +190,6 @@
             background-color: #1a1e22;
         }
         
-        /* Simple Loading Overlay */
         #loader {
             display: none;
             position: absolute;
@@ -221,7 +222,7 @@
         <p style="font-weight: 600; color: #475569; margin-top: 15px;">Model Loading & Processing...</p>
     </div>
 
-    <h1>Image Optimizer & Background Remover by SheeraZ</h1>
+    <h1>Image Optimizer & Background Remover</h1>
     <p style="color: #64748b; margin-top: -10px; font-size: 13px;">Resize, Compress to 20KB, and convert backgrounds to pure white.</p>
 
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
@@ -293,13 +294,13 @@
     let originalAspectRatio = 1;
     let segmentationModel = null;
 
-    // Load the upgraded body-segmentation model
+    // Fixed: Loading the model using the stable MediaPipe runtime
     async function loadModel() {
         try {
             const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
             const segmenterConfig = {
-                runtime: 'tfjs', 
-                modelType: 'general'
+                runtime: 'mediapipe', 
+                solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation'
             };
             segmentationModel = await bodySegmentation.createSegmenter(model, segmenterConfig);
             status.innerText = "Processing tools loaded. Ready for your image.";
@@ -310,7 +311,6 @@
     }
     loadModel();
 
-    // Drag and drop handlers
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent-color)'; }, false);
     });
@@ -326,7 +326,6 @@
         if (e.target.files.length) handleFile(e.target.files[0]);
     });
 
-    // Handle Linked Inputs for Aspect Ratio
     targetWidthInput.addEventListener('input', () => {
         if (lockAspect.checked && originalImage) {
             targetHeightInput.value = Math.round(parseInt(targetWidthInput.value) / originalAspectRatio) || '';
@@ -378,24 +377,20 @@
         processBtn.disabled = true;
 
         try {
-            // STEP 1: Process Background Removal on the full image
             let inputSource = originalImage;
             if (removeBg && segmentationModel) {
                 inputSource = await processRemoveBackground(originalImage);
             }
 
-            // STEP 2: Scale it properly onto a canvas of your exact target dimensions
             const mainCanvas = document.createElement('canvas');
             mainCanvas.width = finalWidth;
             mainCanvas.height = finalHeight;
             const mainCtx = mainCanvas.getContext('2d');
             
-            // Draw background as white first, to handle any transparent leftover gaps
             mainCtx.fillStyle = "#FFFFFF";
             mainCtx.fillRect(0, 0, finalWidth, finalHeight);
             mainCtx.drawImage(inputSource, 0, 0, finalWidth, finalHeight);
 
-            // STEP 3: Iterate quality downwards to hit 20 KB
             processedBlob = await iterativeQualityCompression(mainCanvas, targetKB);
             
             const url = URL.createObjectURL(processedBlob);
@@ -418,35 +413,23 @@
         }
     });
 
-    /**
-     * Upgraded Machine Learning background removal.
-     */
     async function processRemoveBackground(img) {
-        // Find the person
         const people = await segmentationModel.segmentPeople(img);
         
-        // Define colors: We want the person to be completely transparent (so they show through)
-        // and the background to be pure white
-        const foregroundColor = {r: 0, g: 0, b: 0, a: 0}; 
-        const backgroundColor = {r: 255, g: 255, b: 255, a: 255};
+        const foregroundColor = {r: 0, g: 0, b: 0, a: 0}; // Transparent person
+        const backgroundColor = {r: 255, g: 255, b: 255, a: 255}; // Solid white background
         
-        // Generate the binary mask
         const mask = await bodySegmentation.toBinaryMask(people, foregroundColor, backgroundColor);
 
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
 
-        // Draw original image, then overlay the mask
-        // Opacity 1.0, Blur 2 (softens the edges around hair automatically!)
         await bodySegmentation.drawMask(canvas, img, mask, 1.0, 2);
 
         return canvas; 
     }
 
-    /**
-     * Iterative target compression.
-     */
     async function iterativeQualityCompression(canvas, targetKB) {
         const targetBytes = targetKB * 1024;
         let bestBlob = null;
