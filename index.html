@@ -6,7 +6,7 @@
     <title>Advanced Image Optimizer with BG Removal</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/selfie-segmentation@1.0.3/dist/selfie_segmentation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation@1.2.0/dist/body-segmentation.min.js"></script>
 
     <style>
         :root {
@@ -221,7 +221,7 @@
         <p style="font-weight: 600; color: #475569; margin-top: 15px;">Model Loading & Processing...</p>
     </div>
 
-    <h1>Image Optimizer & Background Remover by SheeraZ</h1>
+    <h1>Image Optimizer & Background Remover</h1>
     <p style="color: #64748b; margin-top: -10px; font-size: 13px;">Resize, Compress to 20KB, and convert backgrounds to pure white.</p>
 
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
@@ -247,7 +247,7 @@
             <label for="lockAspect">Maintain Original Aspect Ratio</label>
         </div>
         <div class="checkbox-group bg-checkbox">
-            <input type="checkbox" id="removeBg">
+            <input type="checkbox" id="removeBg" checked>
             <label for="removeBg" style="color: #0366d6;">Remove Background (Set White)</label>
         </div>
     </div>
@@ -293,10 +293,15 @@
     let originalAspectRatio = 1;
     let segmentationModel = null;
 
-    // Load segmentation model once upfront to save processing time later
+    // Load the upgraded body-segmentation model
     async function loadModel() {
         try {
-            segmentationModel = await selfieSegmentation.load();
+            const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
+            const segmenterConfig = {
+                runtime: 'tfjs', 
+                modelType: 'general'
+            };
+            segmentationModel = await bodySegmentation.createSegmenter(model, segmenterConfig);
             status.innerText = "Processing tools loaded. Ready for your image.";
         } catch (error) {
             console.error("Failed to load TensorFlow model", error);
@@ -346,7 +351,6 @@
                 originalImage = img;
                 originalAspectRatio = img.width / img.height;
                 
-                // Only adjust inputs on load if the aspect lock happens to be manually checked
                 if (lockAspect.checked) {
                     targetHeightInput.value = Math.round(parseInt(targetWidthInput.value) / originalAspectRatio);
                 }
@@ -369,33 +373,33 @@
         const finalHeight = parseInt(targetHeightInput.value) || 800;
         const removeBg = removeBgCheckbox.checked;
 
-        loader.style.display = 'flex'; // Show loading screen
+        loader.style.display = 'flex'; 
         status.innerText = "Processing complexity... Machine learning may take a few seconds...";
         processBtn.disabled = true;
 
         try {
-            // STEP 1: Process the background removal on the ORIGINAL image size first for best results
+            // STEP 1: Process Background Removal on the full image
             let inputSource = originalImage;
             if (removeBg && segmentationModel) {
                 inputSource = await processRemoveBackground(originalImage);
             }
 
-            // STEP 2: Create a scaled canvas at the final user dimensions
+            // STEP 2: Scale it properly onto a canvas of your exact target dimensions
             const mainCanvas = document.createElement('canvas');
             mainCanvas.width = finalWidth;
             mainCanvas.height = finalHeight;
             const mainCtx = mainCanvas.getContext('2d');
-
-            // Draw image matching custom chosen resolution (handles scaling/resizing/stretching automatically)
-            // If BG removal was run, inputSource is a canvas containing the isolated subject + white background.
+            
+            // Draw background as white first, to handle any transparent leftover gaps
+            mainCtx.fillStyle = "#FFFFFF";
+            mainCtx.fillRect(0, 0, finalWidth, finalHeight);
             mainCtx.drawImage(inputSource, 0, 0, finalWidth, finalHeight);
 
-            // STEP 3: Iteratively compress the canvas quality until we meet the KB budget
+            // STEP 3: Iterate quality downwards to hit 20 KB
             processedBlob = await iterativeQualityCompression(mainCanvas, targetKB);
             
             const url = URL.createObjectURL(processedBlob);
             
-            // Show new preview
             const finalImg = new Image();
             finalImg.onload = function() {
                 document.getElementById('compPreview').innerHTML = `<img src="${url}">`;
@@ -409,40 +413,39 @@
             status.innerText = "Error during processing.";
             console.error(err);
         } finally {
-            loader.style.display = 'none'; // Hide loading screen
+            loader.style.display = 'none'; 
             processBtn.disabled = false;
         }
     });
 
     /**
-     * Machine Learning step: Use TensorFlow.js to isolate subject and replace background with white.
+     * Upgraded Machine Learning background removal.
      */
-    async function processRemoveBackground(originalImage) {
-        // Run segmentation model on original full-sized image
-        const segmentation = await segmentationModel.estimateSegmentation(originalImage);
+    async function processRemoveBackground(img) {
+        // Find the person
+        const people = await segmentationModel.segmentPeople(img);
         
-        // Prepare original-size working canvas
+        // Define colors: We want the person to be completely transparent (so they show through)
+        // and the background to be pure white
+        const foregroundColor = {r: 0, g: 0, b: 0, a: 0}; 
+        const backgroundColor = {r: 255, g: 255, b: 255, a: 255};
+        
+        // Generate the binary mask
+        const mask = await bodySegmentation.toBinaryMask(people, foregroundColor, backgroundColor);
+
         const canvas = document.createElement('canvas');
-        canvas.width = originalImage.width;
-        canvas.height = originalImage.height;
-        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
 
-        // Draw the model's prediction mask on canvas
-        ctx.putImageData(segmentation.mask, 0, 0);
+        // Draw original image, then overlay the mask
+        // Opacity 1.0, Blur 2 (softens the edges around hair automatically!)
+        await bodySegmentation.drawMask(canvas, img, mask, 1.0, 2);
 
-        // Draw the background as white
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Composite the original image ON TOP of the white background using the subject mask
-        ctx.globalCompositeOperation = 'destination-atop';
-        ctx.drawImage(originalImage, 0, 0);
-
-        return canvas; // Returns a canvas with the isolated subject on pure white
+        return canvas; 
     }
 
     /**
-     * Iterative compression step from previous version (now strictly quality, not dimensional scaling).
+     * Iterative target compression.
      */
     async function iterativeQualityCompression(canvas, targetKB) {
         const targetBytes = targetKB * 1024;
@@ -451,10 +454,8 @@
         let low = 0.01;
         let high = 1.0;
         
-        // Binary search to find highest possible JPEG quality variant
         for (let i = 0; i < 7; i++) {
             let quality = (low + high) / 2;
-            // Force conversion to JPEG, which can handle solid white backgrounds compactly
             let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
             
             if (blob.size <= targetBytes) {
