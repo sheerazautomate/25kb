@@ -9,6 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         :root {
@@ -47,6 +49,7 @@
             margin-top: 0;
             color: var(--primary-color);
             font-size: 22px;
+            margin-bottom: 5px;
         }
 
         .upload-zone {
@@ -212,6 +215,22 @@
         
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        #globalCounter {
+            color: #475569;
+            font-weight: 600;
+            font-size: 14px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            background: #edf7ed;
+            padding: 6px 12px;
+            border-radius: 20px;
+            display: inline-block;
+            border: 1px solid #c8e6c9;
+        }
+        #countNumber {
+            color: var(--accent-color);
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -222,8 +241,11 @@
         <p style="font-weight: 600; color: #475569; margin-top: 15px;">Model Loading & Processing...</p>
     </div>
 
-    <h1>Image Optimizer & Background Remover by SheeraZ</h1>
-    <p style="color: #64748b; margin-top: -10px; font-size: 13px;">Resize, Compress to 20KB, and convert backgrounds to pure white.</p>
+    <h1>Image Optimizer & Background Remover</h1>
+    
+    <div id="globalCounter">
+        ⚡ Helped people optimize <span id="countNumber">...</span> pictures!
+    </div>
 
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <p id="uploadPrompt">Drag & drop your image here or <strong>Browse</strong></p>
@@ -233,7 +255,7 @@
     <div class="controls-grid">
         <div class="control-group">
             <label for="targetSize">Target Max (KB):</label>
-            <input type="number" id="targetSize" value="20" min="5" max="5000">
+            <input type="number" id="targetSize" value="25" min="5" max="5000">
         </div>
         <div class="control-group">
             <label for="targetWidth">Width (px):</label>
@@ -276,6 +298,11 @@
 </div>
 
 <script>
+    // Supabase Configuration
+    const supabaseUrl = 'https://hvxzjpxjnussldgdrkma.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2eHpqcHhqbnVzc2xkZ2Rya21hIiwicm9sZSI6Imh2eHpqcHhqbnVzc2xkZ2Rya21hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MjMxMzgsImV4cCI6MjA5NjM5OTEzOH0._pw1IyV-pg_jEcV5Hw0pcfShb-L21HZq1xDZ2pXpPXs';
+    const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
     const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
     const processBtn = document.getElementById('processBtn');
@@ -294,7 +321,25 @@
     let originalAspectRatio = 1;
     let segmentationModel = null;
 
-    // Fixed: Loading the model using the stable MediaPipe runtime
+    // Fetch the total conversion count from database
+    async function loadGlobalCount() {
+        try {
+            const { data, error } = await _supabase
+                .from('app_stats')
+                .select('total_conversions')
+                .eq('id', 1)
+                .single();
+                
+            if (data) {
+                document.getElementById('countNumber').innerText = data.total_conversions.toLocaleString();
+            }
+        } catch (err) {
+            console.error("Error loading stats:", err);
+        }
+    }
+    loadGlobalCount();
+
+    // Loading TensorFlow body segmentation models
     async function loadModel() {
         try {
             const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
@@ -404,6 +449,15 @@
             
             status.innerText = `Success! Optimized to ${(processedBlob.size / 1024).toFixed(1)} KB`;
             downloadBtn.style.display = 'inline-block';
+
+            // Safely report back to Supabase to hit the increment function
+            try {
+                await _supabase.rpc('increment_conversions');
+                await loadGlobalCount(); 
+            } catch (dbErr) {
+                console.error("Could not increment remote counter", dbErr);
+            }
+
         } catch (err) {
             status.innerText = "Error during processing.";
             console.error(err);
@@ -416,8 +470,8 @@
     async function processRemoveBackground(img) {
         const people = await segmentationModel.segmentPeople(img);
         
-        const foregroundColor = {r: 0, g: 0, b: 0, a: 0}; // Transparent person
-        const backgroundColor = {r: 255, g: 255, b: 255, a: 255}; // Solid white background
+        const foregroundColor = {r: 0, g: 0, b: 0, a: 0}; 
+        const backgroundColor = {r: 255, g: 255, b: 255, a: 255}; 
         
         const mask = await bodySegmentation.toBinaryMask(people, foregroundColor, backgroundColor);
 
