@@ -4,13 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced Image Optimizer with BG Removal</title>
+    <link rel="icon" href="data:,">
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         :root {
@@ -298,10 +297,9 @@
 </div>
 
 <script>
-    // Supabase Configuration
-    const supabaseUrl = 'https://hvxzjpxjnussldgdrkma.supabase.co/rest/v1/app_stats?apikey=';
+    // Supabase Clean Native REST Configuration
+    const supabaseUrl = 'https://hvxzjpxjnussldgdrkma.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2eHpqcHhqbnVzc2xkZ2Rya21hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MjMxMzgsImV4cCI6MjA5NjM5OTEzOH0._pw1IyV-pg_jEcV5Hw0pcfShb-L21HZq1xDZ2pXpPXs';
-    const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
     const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
@@ -321,17 +319,15 @@
     let originalAspectRatio = 1;
     let segmentationModel = null;
 
-    // Fetch the total conversion count from database
+    // Fetch total conversion count using direct browser-friendly URL
     async function loadGlobalCount() {
         try {
-            const { data, error } = await _supabase
-                .from('app_stats')
-                .select('total_conversions')
-                .eq('id', 1)
-                .single();
+            const endpoint = `${supabaseUrl}/rest/v1/app_stats?id=eq.1&select=total_conversions&apikey=${supabaseKey}`;
+            const response = await fetch(endpoint);
+            const data = await response.json();
                 
-            if (data) {
-                document.getElementById('countNumber').innerText = data.total_conversions.toLocaleString();
+            if (data && data.length > 0) {
+                document.getElementById('countNumber').innerText = data[0].total_conversions.toLocaleString();
             }
         } catch (err) {
             console.error("Error loading stats:", err);
@@ -351,7 +347,7 @@
             status.innerText = "Processing tools loaded. Ready for your image.";
         } catch (error) {
             console.error("Failed to load TensorFlow model", error);
-            status.innerText = "Warning: Machine learning model failed to load. Background removal will not work.";
+            status.innerText = "Warning: Background removal engine failed to initialize.";
         }
     }
     loadModel();
@@ -450,10 +446,14 @@
             status.innerText = `Success! Optimized to ${(processedBlob.size / 1024).toFixed(1)} KB`;
             downloadBtn.style.display = 'inline-block';
 
-            // Safely report back to Supabase to hit the increment function
+            // Safely increment database total via direct REST API POST endpoint
             try {
-                await _supabase.rpc('increment_conversions');
-                await loadGlobalCount(); 
+                const rpcEndpoint = `${supabaseUrl}/rest/v1/rpc/increment_conversions?apikey=${supabaseKey}`;
+                await fetch(rpcEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                await loadGlobalCount(); // Instantly refresh the UI text
             } catch (dbErr) {
                 console.error("Could not increment remote counter", dbErr);
             }
