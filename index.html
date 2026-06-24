@@ -3,607 +3,219 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Image Optimizer with BG Removal</title>
-    <link rel="icon" href="data:,">
-    
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
-
+    <title>Image Batch Optimizer & BG Remover - Moved to Android</title>
     <style>
-        :root {
-            --bg-color: #f4f7f6;
-            --card-bg: #ffffff;
-            --primary-color: #24292e;
-            --accent-color: #2ea44f;
-            --text-color: #333;
-            --border-color: #cbd5e1;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
 
-        .container {
-            background: var(--card-bg);
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-            max-width: 800px;
+        .maintenance-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            padding: 50px 40px;
+            max-width: 700px;
             width: 100%;
             text-align: center;
-            position: relative;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
         }
 
         h1 {
-            margin-top: 0;
-            color: var(--primary-color);
-            font-size: 22px;
-            margin-bottom: 5px;
+            color: #1a1a2e;
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: 700;
         }
 
-        .upload-zone {
-            border: 2px dashed var(--border-color);
-            padding: 25px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-bottom: 20px;
-            transition: border-color 0.3s;
-            background: #fafafa;
-        }
-
-        .upload-zone:hover {
-            border-color: var(--accent-color);
-            background: #f0fdf4;
-        }
-
-        input[type="file"] { display: none; }
-
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 15px;
-            margin-bottom: 15px;
-            background: #f8fafc;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            text-align: left;
-            align-items: start;
-        }
-
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .control-group label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #475569;
-        }
-
-        input[type="number"] {
-            padding: 8px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 15px;
-            transition: border-color 0.2s;
-        }
-
-        input[type="number"]:focus {
-            outline: none;
-            border-color: var(--accent-color);
-        }
-
-        .checkbox-group {
-            grid-column: 1 / -1;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: #475569;
-            margin-top: 5px;
-        }
-        
-        .bg-checkbox {
-            background: #e6f1fd;
-            border: 1px solid #0366d6;
-            padding: 12px;
-            border-radius: 6px;
-            margin-top: 10px;
-            display: flex;
-            align-items: center;
-            position: relative;
-        }
-
-        /* Modal & Swatch Styles */
-        .color-swatch {
-            width: 28px; 
-            height: 28px;
-            border-radius: 50%;
-            border: 2px solid #cbd5e1;
-            cursor: pointer;
-            padding: 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.1s;
-        }
-        .color-swatch:hover { transform: scale(1.05); }
-
-        .color-picker-modal {
-            position: absolute;
-            top: 50px; 
-            right: 0;
-            z-index: 100;
-            background: #ffffff;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-            border: 1px solid var(--border-color);
-            display: none; 
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .color-picker-modal.active {
-            display: flex;
-        }
-
-        #colorValueText {
-            margin-top: 12px;
-            font-family: monospace;
-            font-size: 14px;
-            color: #0366d6;
-            font-weight: bold;
-            background: #f1f5f9;
-            padding: 4px 8px;
-            border-radius: 4px;
-            border: 1px solid #cbd5e1;
-        }
-
-        button.action-btn {
-            background-color: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 12px 24px;
+        .subtitle {
+            color: #666;
             font-size: 16px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .highlight {
+            color: #667eea;
             font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background 0.2s;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 16px 32px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(102, 126, 234, 0.5);
+        }
+
+        .download-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #ddd, transparent);
+            margin: 30px 0;
+        }
+
+        .video-section h2 {
+            color: #1a1a2e;
+            font-size: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+            border-radius: 16px;
+            background: #1a1a2e;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            margin-top: 10px;
+            height: 100%;
+            border: none;
+            border-radius: 16px;
         }
 
-        button.action-btn:hover:not(:disabled) { background-color: #2c974b; }
-        button.action-btn:disabled { background-color: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
-
-        .gallery-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-            max-height: 400px;
-            overflow-y: auto;
-            padding: 15px;
-            background: #f1f5f9;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            display: none;
-        }
-
-        .gallery-item {
-            background: white;
-            border-radius: 8px;
-            padding: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            text-align: center;
-            font-size: 12px;
-            color: #475569;
+        .video-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            position: relative; /* Anchor for absolute hover elements */
+            align-items: center;
+            justify-content: center;
+            color: #888;
+            gap: 10px;
         }
 
-        .image-container {
-            position: relative;
-            width: 100%;
-            height: 120px;
-            margin-bottom: 8px;
-            border-radius: 4px;
-            overflow: hidden;
-            background: #cbd5e1;
+        .video-placeholder svg {
+            width: 60px;
+            height: 60px;
+            opacity: 0.5;
         }
 
-        .gallery-item img {
-            width: 100%; height: 100%;
-            object-fit: contain;
-            display: block;
+        .footer {
+            margin-top: 25px;
+            color: #999;
+            font-size: 13px;
         }
 
-        /* Single Download Hover Button */
-        .single-dl-btn {
-            position: absolute;
-            bottom: 6px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(3, 102, 214, 0.95);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            text-decoration: none;
-            font-weight: bold;
-            opacity: 0;
-            transition: opacity 0.2s ease-in-out, background 0.2s;
-            pointer-events: none; /* Ignore clicks until ready */
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            white-space: nowrap;
+        /* Responsive */
+        @media (max-width: 480px) {
+            .maintenance-card {
+                padding: 35px 25px;
+            }
+            h1 {
+                font-size: 22px;
+            }
+            .download-btn {
+                font-size: 16px;
+                padding: 14px 24px;
+            }
         }
-        .single-dl-btn:hover {
-            background: #0256b4;
-        }
-        
-        /* Show only when the image card is hovered AND the button has the 'ready' class */
-        .gallery-item:hover .single-dl-btn.ready {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .gallery-item .file-name {
-            white-space: nowrap; overflow: hidden;
-            text-overflow: ellipsis; font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .status-badge {
-            display: inline-block; padding: 4px 8px;
-            border-radius: 12px; font-size: 11px; font-weight: bold;
-            background: #e2e8f0; color: #475569; margin-top: 5px;
-        }
-        .status-badge.processing { background: #fef08a; color: #854d0e; }
-        .status-badge.done { background: #bbf7d0; color: #166534; }
-
-        #status { margin-top: 15px; font-weight: 600; color: #0366d6; }
-
-        #downloadBtn { background-color: #0366d6; display: none; margin-top: 15px; }
-        #downloadBtn:hover { background-color: #0256b4; }
-        
-        #globalCounter {
-            color: #475569; font-weight: 600; font-size: 14px;
-            margin-top: 0; margin-bottom: 20px; background: #edf7ed;
-            padding: 6px 12px; border-radius: 20px;
-            display: inline-block; border: 1px solid #c8e6c9;
-        }
-        #countNumber { color: var(--accent-color); font-weight: 700; }
-
-        .developer-promo-card {
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            border: 1px solid #e2e8f0; border-left: 4px solid #0366d6;
-            border-radius: 8px; padding: 15px; margin-top: 25px; text-align: left;
-        }
-        .developer-promo-card h4 { margin: 0 0 5px 0; color: #1e293b; font-size: 16px; }
-        .developer-promo-card p { margin: 0 0 10px 0; font-size: 13px; color: #475569; line-height: 1.5; }
-        .developer-meta-links { display: flex; gap: 15px; font-size: 14px; font-weight: 600; flex-wrap: wrap; }
-        .developer-meta-links a { color: #0366d6; text-decoration: none; background: #e6f1fd; padding: 4px 8px; border-radius: 4px; }
-        .developer-meta-links a:hover { text-decoration: underline; background: #dbeafe; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Image Batch Optimizer & BG Remover</h1>
-    
-    <div id="globalCounter">
-        ⚡ Helped people optimize <span id="countNumber">...</span> pictures!
-    </div>
+    <div class="maintenance-card">
+        <!-- App Icon -->
+        <div class="icon">📱</div>
 
-    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <p id="uploadPrompt" style="font-size: 16px; margin: 0;">Drag & drop up to <strong>30 images</strong> here or <strong>Browse</strong></p>
-        <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Supports bulk processing to save your time.</p>
-        <input type="file" id="fileInput" accept="image/*" multiple>
-    </div>
+        <h1>We've Moved to Android!</h1>
+        <p class="subtitle">
+            The <span class="highlight">Image Batch Optimizer & BG Remover</span> web app has been discontinued and is now available exclusively as an Android App for a better, faster experience.
+        </p>
 
-    <div class="controls-grid">
-        <div class="control-group">
-            <label for="targetSize">Target Max (KB):</label>
-            <input type="number" id="targetSize" value="25" min="5" max="5000">
-        </div>
-        <div class="control-group">
-            <label for="targetWidth">Max Width (px):</label>
-            <input type="number" id="targetWidth" value="600" min="10">
-        </div>
-        <div class="control-group">
-            <label for="targetHeight">Max Height (px):</label>
-            <input type="number" id="targetHeight" value="800" min="10">
-        </div>
-        <div class="checkbox-group">
-            <input type="checkbox" id="lockAspect" unchecked>
-            <label for="lockAspect">Auto-Scale Ratio (Recommended)</label>
-        </div>
-        
-        <div class="checkbox-group bg-checkbox">
-            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="removeBg" checked>
-                    <label for="removeBg" style="color: #0366d6; font-weight: 600; cursor: pointer;">Remove Background</label>
-                </div>
-                <button type="button" id="colorSwatch" class="color-swatch" style="background-color: #FFFFFF;" title="Pick background color"></button>
-            </div>
-            
-            <div class="color-picker-modal" id="colorPickerUI">
-                <div style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 10px;">
-                    <label style="font-size: 12px; font-weight: bold; color: #475569;">Pick BG Color</label>
-                    <span id="closeColorPicker" style="cursor: pointer; font-size: 14px; color: #94a3b8; line-height: 1;">✖</span>
-                </div>
-                <div id="iroColorPicker"></div>
-                <div id="colorValueText">#FFFFFF</div>
+        <!-- Download Button -->
+        <a href="YOUR_GOOGLE_DRIVE_LINK_HERE" class="download-btn" target="_blank">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download Android App
+        </a>
+
+        <div class="divider"></div>
+
+        <!-- Tutorial Video Section -->
+        <div class="video-section">
+            <h2>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ff0000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.07 18.86 18.86 0 0 0 12 20c3.33 0 6.88-.12 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path>
+                    <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon>
+                </svg>
+                How to Install & Use
+            </h2>
+            <div class="video-wrapper">
+                <!-- 
+                    REPLACE THE src BELOW WITH YOUR YOUTUBE EMBED LINK
+                    Format: https://www.youtube.com/embed/VIDEO_ID
+                    To get this: Go to your YouTube video → Share → Embed → copy the src URL
+                    
+                    For private/unlisted videos: Make sure the video is "Unlisted" (not Private) 
+                    so it can be embedded and viewed by anyone with the link.
+                -->
+                <iframe 
+                    src="https://www.youtube.com/embed/YOUR_VIDEO_ID_HERE" 
+                    title="App Tutorial" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    allowfullscreen>
+                </iframe>
             </div>
         </div>
-    </div>
 
-    <button id="processBtn" class="action-btn" disabled>Process Images</button>
-    <div id="status">Loading AI Models... Please wait.</div>
-
-    <div id="galleryContainer" class="gallery-grid"></div>
-    <button id="downloadBtn" class="action-btn">Download All (.zip)</button>
-
-    <div class="developer-promo-card">
-        <h4>Looking for Custom Dashboards or Automation Systems?</h4>
-        <p>If you want to streamline your administration with data-driven dashboards, automated reporting sheets, or personal utility apps built just like this project, let's build it together!</p>
-        <div class="developer-meta-links">
-            <span style="padding: 4px 0;">👨‍💻 Developer: <strong>Sheeraz Saleem</strong></span>
-            <a href="https://wa.me/923347667999" target="_blank">💬 Contact: +92334-7667999</a>
+        <div class="footer">
+            Thank you for using our tool! 🚀
         </div>
     </div>
-</div>
-
-<script>
-    const supabaseUrl = 'https://hvxzjpxjnussldgdrkma.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2eHpqcHhqbnVzc2xkZ2Rya21hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MjMxMzgsImV4cCI6MjA5NjM5OTEzOH0._pw1IyV-pg_jEcV5Hw0pcfShb-L21HZq1xDZ2pXpPXs';
-
-    const fileInput = document.getElementById('fileInput');
-    const dropZone = document.getElementById('dropZone');
-    const processBtn = document.getElementById('processBtn');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const status = document.getElementById('status');
-    const galleryContainer = document.getElementById('galleryContainer');
-    const removeBgCheckbox = document.getElementById('removeBg');
-    const lockAspect = document.getElementById('lockAspect');
-    
-    // Modal UI Elements
-    const colorSwatch = document.getElementById('colorSwatch');
-    const colorPickerUI = document.getElementById('colorPickerUI');
-    const closeColorPicker = document.getElementById('closeColorPicker');
-    
-    let fileQueue = [];
-    let processedOutputs = [];
-    let segmentationModel = null;
-    let isModelLoaded = false;
-    let activeBackgroundColor = "#FFFFFF";
-
-    // Setup Iro.js Color Picker
-    const colorPicker = new iro.ColorPicker("#iroColorPicker", {
-        width: 140,
-        color: "#ffffff",
-        borderWidth: 1,
-        borderColor: "#cbd5e1",
-        layout: [
-            { component: iro.ui.Wheel },
-            { component: iro.ui.Slider, options: { sliderType: 'value' } }
-        ]
-    });
-
-    // Handle Swatch / Modal Interactions
-    colorSwatch.addEventListener('click', (e) => {
-        e.stopPropagation();
-        colorPickerUI.classList.toggle('active');
-    });
-
-    closeColorPicker.addEventListener('click', () => {
-        colorPickerUI.classList.remove('active');
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!colorPickerUI.contains(e.target) && e.target !== colorSwatch) {
-            colorPickerUI.classList.remove('active');
-        }
-    });
-
-    colorPicker.on('color:change', function(color) {
-        activeBackgroundColor = color.hexString;
-        document.getElementById('colorValueText').innerText = activeBackgroundColor.toUpperCase();
-        colorSwatch.style.backgroundColor = activeBackgroundColor;
-    });
-
-    // Stats & Model Loading
-    async function loadGlobalCount() {
-        try {
-            const res = await fetch(`${supabaseUrl}/rest/v1/app_stats?id=eq.1&select=total_conversions&apikey=${supabaseKey}`);
-            const data = await res.json();
-            if (data && data.length > 0) document.getElementById('countNumber').innerText = data[0].total_conversions.toLocaleString();
-        } catch (err) {}
-    }
-    loadGlobalCount();
-
-    async function loadModel() {
-        try {
-            const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
-            segmentationModel = await bodySegmentation.createSegmenter(model, { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation' });
-            isModelLoaded = true;
-            status.innerText = "Ready for your images.";
-        } catch (error) {
-            status.innerText = "Error loading AI Engine.";
-        }
-    }
-    loadModel();
-
-    // Drag Drop Handlers
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); }, false));
-    dropZone.addEventListener('dragover', () => dropZone.style.borderColor = 'var(--accent-color)');
-    dropZone.addEventListener('dragleave', () => dropZone.style.borderColor = 'var(--border-color)');
-    dropZone.addEventListener('drop', (e) => {
-        dropZone.style.borderColor = 'var(--border-color)';
-        if (e.dataTransfer.files.length) handleMultipleFiles(e.dataTransfer.files);
-    });
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length) handleMultipleFiles(e.target.files);
-    });
-
-    function handleMultipleFiles(files) {
-        fileQueue = Array.from(files).slice(0, 30); 
-        processedOutputs = [];
-        downloadBtn.style.display = 'none';
-        galleryContainer.innerHTML = ''; 
-        galleryContainer.style.display = 'grid'; 
-
-        fileQueue.forEach((file, index) => {
-            const objUrl = URL.createObjectURL(file); 
-            const card = document.createElement('div');
-            card.className = 'gallery-item';
-            
-            // Updated UI structure for hover download button
-            card.innerHTML = `
-                <div class="file-name" title="${file.name}">${file.name}</div>
-                <div class="image-container">
-                    <img src="${objUrl}" id="img-${index}">
-                    <a href="#" class="single-dl-btn" id="dl-${index}">⬇ Download</a>
-                </div>
-                <div>Original: ${(file.size / 1024).toFixed(1)} KB</div>
-                <div class="status-badge" id="badge-${index}">Queued</div>
-            `;
-            galleryContainer.appendChild(card);
-        });
-        if(isModelLoaded) { processBtn.disabled = false; status.innerText = `${fileQueue.length} images queued. Click Process.`; }
-    }
-
-    processBtn.addEventListener('click', async () => {
-        if (fileQueue.length === 0) return;
-        processBtn.disabled = true;
-        downloadBtn.style.display = 'none';
-        
-        const targetKB = parseFloat(document.getElementById('targetSize').value);
-        const targetW = parseInt(document.getElementById('targetWidth').value) || 600;
-        const targetH = parseInt(document.getElementById('targetHeight').value) || 800;
-        const removeBg = removeBgCheckbox.checked;
-        const keepRatio = lockAspect.checked;
-
-        status.innerText = `Processing batch... Do not close the tab.`;
-
-        for (let i = 0; i < fileQueue.length; i++) {
-            const file = fileQueue[i];
-            const badge = document.getElementById(`badge-${i}`);
-            const imgElementUI = document.getElementById(`img-${i}`);
-            const singleDlBtn = document.getElementById(`dl-${i}`);
-            
-            badge.className = 'status-badge processing';
-            badge.innerText = 'Processing...';
-
-            try {
-                const imgObj = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = e => { const img = new Image(); img.onload = () => resolve(img); img.src = e.target.result; };
-                    reader.readAsDataURL(file);
-                });
-
-                let finalW = targetW; let finalH = targetH;
-                if (keepRatio) {
-                    const ratio = imgObj.width / imgObj.height;
-                    if (targetW / targetH > ratio) { finalW = Math.round(targetH * ratio); } 
-                    else { finalH = Math.round(targetW / ratio); }
-                }
-
-                const mainCanvas = document.createElement('canvas');
-                mainCanvas.width = finalW; mainCanvas.height = finalH;
-                const mainCtx = mainCanvas.getContext('2d');
-                
-                mainCtx.fillStyle = removeBg ? activeBackgroundColor : "#FFFFFF";
-                mainCtx.fillRect(0, 0, finalW, finalH);
-
-                let inputSource = imgObj;
-                if (removeBg && segmentationModel) {
-                    inputSource = await processRemoveBackground(imgObj);
-                }
-                mainCtx.drawImage(inputSource, 0, 0, finalW, finalH);
-
-                const blob = await iterativeQualityCompression(mainCanvas, targetKB);
-                const rawName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-                const finalName = `${rawName}_opt.jpg`;
-                processedOutputs.push({ blob: blob, fileName: finalName });
-
-                const newUrl = URL.createObjectURL(blob);
-                imgElementUI.src = newUrl; 
-                badge.className = 'status-badge done';
-                badge.innerText = `Done: ${(blob.size/1024).toFixed(1)}KB`;
-                
-                // Activate the single download button!
-                singleDlBtn.href = newUrl;
-                singleDlBtn.download = finalName;
-                singleDlBtn.classList.add('ready');
-
-                try { await fetch(`${supabaseUrl}/rest/v1/rpc/increment_conversions?apikey=${supabaseKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }}); } catch (e) {}
-            } catch (err) {
-                badge.className = 'status-badge'; badge.style.background = '#fee2e2'; badge.style.color = '#991b1b'; badge.innerText = 'Failed';
-            }
-        }
-        await loadGlobalCount();
-        status.innerText = `Successfully processed ${processedOutputs.length} images!`;
-        downloadBtn.style.display = 'block'; processBtn.disabled = false;
-    });
-
-    async function processRemoveBackground(img) {
-        const people = await segmentationModel.segmentPeople(img);
-        const fg = {r: 255, g: 255, b: 255, a: 255}; 
-        const bg = {r: 0, g: 0, b: 0, a: 0}; 
-        const mask = await bodySegmentation.toBinaryMask(people, fg, bg);
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width; canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.putImageData(mask, 0, 0);
-        ctx.globalCompositeOperation = 'source-in';
-        ctx.drawImage(img, 0, 0);
-        ctx.globalCompositeOperation = 'source-over';
-        return canvas; 
-    }
-
-    async function iterativeQualityCompression(canvas, targetKB) {
-        const targetBytes = targetKB * 1024;
-        let bestBlob = null; let low = 0.01; let high = 1.0;
-        for (let i = 0; i < 6; i++) {
-            let q = (low + high) / 2;
-            let blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
-            if (blob.size <= targetBytes) { bestBlob = blob; low = q; } else { high = q; }
-        }
-        return bestBlob || await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.01));
-    }
-
-    downloadBtn.addEventListener('click', async () => {
-        if (processedOutputs.length === 0) return;
-        status.innerText = "Zipping files... please wait.";
-        const zip = new JSZip();
-        processedOutputs.forEach(item => zip.file(item.fileName, item.blob));
-        const content = await zip.generateAsync({ type: "blob" });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(content);
-        link.download = `Optimized_Images_Sheeraz.zip`;
-        link.click();
-        status.innerText = "Download complete!";
-    });
-</script>
 
 </body>
 </html>
